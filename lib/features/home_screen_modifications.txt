@@ -1,0 +1,115 @@
+// ========================================
+// التعديلات المطلوبة على home_screen.dart
+// ========================================
+
+// 1. أضف هذا الـ import في بداية الملف:
+import '../../admin/view/admin_dashboard_screen.dart';
+
+// ========================================
+// 2. أضف هذه الدالة للتحقق من صلاحية Admin:
+// ========================================
+
+bool _hasAdminAccess(ProfileState profileState) {
+  if (profileState is ProfileLoaded) {
+    return profileState.user.hasAdminAccess;
+  }
+  return false;
+}
+
+// ========================================
+// 3. في دالة build، احصل على hasAdminAccess:
+// ========================================
+
+// داخل BlocBuilder<ProfileCubit, ProfileState>:
+final hasAdminAccess = _hasAdminAccess(profileState);
+
+// ========================================
+// 4. عدّل _getPage لإضافة AdminDashboardScreen:
+// ========================================
+
+Widget _getPage(int index, String userName, String? userImage, bool hasAdminAccess) {
+  switch (index) {
+    case 0:
+      return _buildHomeContent(context, userName, userImage);
+    case 1:
+      return const ServicesScreen(showAppBar: false);
+    case 2:
+      return const MyAppointmentsScreen(showAppBar: false);
+    case 3:
+      return const ProfileScreen(showAppBar: false);
+    case 4:
+      if (hasAdminAccess) {
+        return const AdminDashboardScreen();
+      }
+      return _buildHomeContent(context, userName, userImage);
+    default:
+      return _buildHomeContent(context, userName, userImage);
+  }
+}
+
+// ========================================
+// 5. عدّل BottomNavigationBar لإضافة زر Admin:
+// ========================================
+
+Widget _buildBottomNav(BuildContext context, int currentIndex, bool hasAdminAccess) {
+  return BottomNavigationBar(
+    currentIndex: currentIndex,
+    onTap: (index) => context.read<HomeCubit>().changeTab(index),
+    type: BottomNavigationBarType.fixed,
+    backgroundColor: AppColors.white,
+    selectedItemColor: AppColors.primary,
+    unselectedItemColor: AppColors.textHint,
+    items: [
+      BottomNavigationBarItem(icon: Icon(Icons.home), label: 'nav.home'.tr()),
+      BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'nav.services'.tr()),
+      BottomNavigationBarItem(icon: Icon(Icons.history), label: 'nav.history'.tr()),
+      BottomNavigationBarItem(icon: Icon(Icons.person), label: 'nav.profile'.tr()),
+      // ✅ زر Admin - يظهر فقط للـ Admin
+      if (hasAdminAccess)
+        BottomNavigationBarItem(
+          icon: Icon(Icons.admin_panel_settings),
+          label: 'nav.admin'.tr(),
+        ),
+    ],
+  );
+}
+
+// ========================================
+// 6. عدّل Desktop Sidebar أيضاً:
+// ========================================
+
+// في _buildDesktopLayout، أضف بعد زر Profile:
+if (hasAdminAccess)
+  _buildNavItem(
+    context: context,
+    icon: Icons.admin_panel_settings,
+    label: 'nav.admin'.tr(),
+    index: 4,
+    currentIndex: homeState.currentIndex,
+    isDesktop: true,
+  ),
+
+// ========================================
+// 7. تأكد من تمرير hasAdminAccess للدوال:
+// ========================================
+
+// في _buildMobileLayout:
+return Scaffold(
+  body: _getPage(currentIndex, userName, userImage, hasAdminAccess),
+  bottomNavigationBar: _buildBottomNav(context, currentIndex, hasAdminAccess),
+);
+
+// في _buildDesktopLayout:
+// تأكد من تمرير hasAdminAccess
+
+// ========================================
+// 8. التحقق من أن currentIndex لا يتجاوز عدد الـ Tabs:
+// ========================================
+
+// في بداية _buildMobileLayout:
+final tabCount = hasAdminAccess ? 5 : 4;
+int currentIndex = homeState.currentIndex;
+if (currentIndex >= tabCount) {
+  currentIndex = 0;
+  context.read<HomeCubit>().changeTab(0);
+}

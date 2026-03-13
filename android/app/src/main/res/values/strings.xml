@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- App Name (مهم جدًا) -->
+    <string name="app_name">Sanadi</string>
+
+    <!-- Facebook (سيبهم زي ما هم) -->
+    <string name="facebook_app_id">872944261942425</string>
+    <string name="fb_login_protocol_scheme">fb872944261942425</string>
+    <string name="facebook_client_token">96405ee3858dcaa85e6fe9d9fe61715e</string>
+
+</resources>

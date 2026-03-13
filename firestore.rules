@@ -1,0 +1,201 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // 🔑 Helper Functions
+    // ============================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data.role in ['admin', 'super_admin'];
+    }
+    
+    function isSuperAdmin() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data.role == 'super_admin';
+    }
+    
+    function isModerator() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data.role in ['moderator', 'admin', 'super_admin'];
+    }
+    
+    // ============================================
+    // 👤 Users Collection
+    // ============================================
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      
+      allow create: if isSignedIn() && 
+        request.auth.uid == userId &&
+        request.resource.data.uid == userId;
+      
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive'])) ||
+        isAdmin()
+      );
+      
+      allow delete: if isSignedIn() && isSuperAdmin();
+
+      // ✅ Users Appointments (Nested)
+      match /appointments/{appointmentId} {
+         allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+         allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+
+      // Other subcollections
+      match /{subcollection}/{document=**} {
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+    }
+
+    // ============================================
+    // 👨‍⚕️ Doctors Collection (REQUIRED for Appointments)
+    // ============================================
+    match /doctor/{doctorId} {
+       allow read: if isSignedIn();
+       // Only admin can manage doctor profiles usually
+       allow write: if isSignedIn() && isAdmin();
+       
+       // ✅ Doctor Appointments (Nested) - THIS WAS MISSING
+       match /appointments/{appointmentId} {
+          // Patient can read their own appointment here?? Maybe not needed if they read from user/appointments
+          // But creating an appointment requires writing here.
+          
+          allow read: if isSignedIn() && (
+             resource.data.visitorId == request.auth.uid || 
+             resource.data.doctorId == request.auth.uid || 
+             isModerator()
+          );
+
+          // Allow create if the visitorId matches the current user
+          allow create: if isSignedIn() && request.resource.data.visitorId == request.auth.uid;
+          
+          // Allow update if user owns it (cancel) or doctor/admin
+          allow update: if isSignedIn() && (
+             resource.data.visitorId == request.auth.uid ||
+             resource.data.doctorId == request.auth.uid ||
+             isAdmin()
+          );
+       }
+    }
+
+    // ============================================
+    // 🛍️ Shopping & Orders
+    // ============================================
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || 
+        isModerator()
+      );
+      
+      allow create: if isSignedIn() && 
+        request.resource.data.uid == request.auth.uid;
+      
+      allow update: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || 
+        isAdmin()
+      );
+      
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ============================================
+    // ⭐ Favorites, Addresses, Notifications
+    // ============================================
+    match /favorites/{favoriteId} {
+      allow read: if isSignedIn() && (
+        resource == null || resource.data.uid == request.auth.uid
+      );
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+    
+    match /addresses/{addressId} {
+      allow read: if isSignedIn() && (
+        resource == null || resource.data.uid == request.auth.uid
+      );
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (
+        resource == null || resource.data.uid == request.auth.uid
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.uid == request.auth.uid || isAdmin()
+      );
+      allow update, delete: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ============================================
+    // 🏥 Medical & Health Records
+    // ============================================
+    match /health_records/{recordId} {
+      allow read: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || isModerator()
+      );
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || isAdmin()
+      );
+    }
+
+    match /prescriptions/{prescriptionId} {
+      allow read: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || 
+        resource.data.doctorId == request.auth.uid || 
+        isModerator()
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.doctorId == request.auth.uid || isAdmin()
+      );
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ============================================
+    // 🛒 Grocery Data
+    // ============================================
+    match /grocery_categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isAdmin();
+    }
+    
+    match /grocery_products/{productId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    match /product_reviews/{reviewId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || isModerator()
+      );
+    }
+
+    // ============================================
+    // 🏷️ Specialties (Public)
+    // ============================================
+    match /specialties/{specialtyId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // ============================================
+    // 📋 Default Rule (Fallback)
+    // ============================================
+    match /{document=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isAdmin();
+    }
+  }
+}
